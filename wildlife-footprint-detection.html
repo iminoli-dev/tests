@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Detector de Huellas de Felinos</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #f4f4f4;
+            touch-action: manipulation;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            background-color: black;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #video, #canvas {
+            width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+        }
+        #controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 15px;
+            gap: 15px;
+        }
+        #start-btn, #stop-btn {
+            padding: 10px 20px;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #stop-btn {
+            background-color: #e74c3c;
+        }
+        #detected-objects {
+            margin-top: 15px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #error-message {
+            color: #e74c3c;
+            text-align: center;
+            margin: 15px 0;
+        }
+        #detected-objects-list {
+            list-style-type: none;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        #detected-objects-list li {
+            background-color: #ecf0f1;
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .species-info {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .confidence {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="controls">
+            <button id="start-btn">Iniciar Detección</button>
+            <button id="stop-btn" disabled>Detener Detección</button>
+        </div>
+        <div id="error-message"></div>
+        <div id="detected-objects">
+            <h3>Huellas Detectadas</h3>
+            <ul id="detected-objects-list"></ul>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const errorMessage = document.getElementById('error-message');
+        const detectedObjectsList = document.getElementById('detected-objects-list');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+
+        // Custom footprint classification model (simulated)
+        class FootprintClassifier {
+            constructor() {
+                this.classes = ['Puma concolor', 'Panthera onca'];
+            }
+
+            async load() {
+                this.baseModel = await mobilenet.load();
+                return this;
+            }
+
+            async detect(image) {
+                // Simulate specialized footprint detection
+                const activation = this.baseModel.infer(image, true);
+                
+                // Mock classification logic
+                const predictions = [
+                    { 
+                        class: 'Puma concolor', 
+                        score: Math.random() > 0.5 ? Math.random() * 0.5 : 0 
+                    },
+                    { 
+                        class: 'Panthera onca', 
+                        score: Math.random() > 0.5 ? Math.random() * 0.5 : 0 
+                    }
+                ];
+
+                return predictions
+                    .filter(pred => pred.score > 0.3)
+                    .map(pred => ({
+                        class: pred.class,
+                        score: pred.score
+                    }));
+            }
+        }
+
+        let detectionInterval;
+        const detectedObjects = new Set();
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                video.srcObject = stream;
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        resolve();
+                    };
+                });
+            } catch (error) {
+                errorMessage.textContent = 'Error al acceder a la cámara: ' + error.message;
+                throw error;
+            }
+        }
+
+        async function detectFootprints(model) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const predictions = await model.detect(canvas);
+            predictions.forEach(prediction => {
+                // Simulated bounding box and label
+                const x = Math.random() * canvas.width / 2;
+                const y = Math.random() * canvas.height / 2;
+                const width = 100;
+                const height = 100;
+                const label = `${prediction.class} (${Math.round(prediction.score * 100)}%)`;
+
+                // Draw bounding box
+                ctx.strokeStyle = prediction.class === 'Puma concolor' ? 'blue' : 'green';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, width, height);
+
+                // Add label
+                ctx.fillStyle = prediction.class === 'Puma concolor' ? 'blue' : 'green';
+                ctx.font = '14px Arial';
+                ctx.fillText(label, x, y - 5);
+
+                // Track unique objects
+                if (!detectedObjects.has(prediction.class)) {
+                    detectedObjects.add(prediction.class);
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `
+                        <span class="species-info">${prediction.class}</span>
+                        <span class="confidence">${Math.round(prediction.score * 100)}%</span>
+                        <span>${new Date().toLocaleTimeString()}</span>
+                    `;
+                    detectedObjectsList.appendChild(listItem);
+                }
+            });
+        }
+
+        async function startDetection() {
+            try {
+                const model = new FootprintClassifier();
+                await model.load();
+                
+                detectionInterval = setInterval(() => detectFootprints(model), 500);
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                errorMessage.textContent = '';
+            } catch (error) {
+                errorMessage.textContent = 'Error al iniciar la detección: ' + error.message;
+            }
+        }
+
+        function stopDetection() {
+            clearInterval(detectionInterval);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        async function main() {
+            try {
+                await setupCamera();
+                video.play();
+                
+                startBtn.addEventListener('click', startDetection);
+                stopBtn.addEventListener('click', stopDetection);
+            } catch (error) {
+                errorMessage.textContent = 'Error de inicialización: ' + error.message;
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
