@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Object Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        video {
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-top: 20px;
+            width: 90%;
+            max-width: 800px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+
+        #detections {
+            margin-top: 20px;
+            width: 90%;
+            max-width: 800px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        #detections ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #detections ul li {
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-Time Object Detection</h1>
+    <video id="webcam" autoplay muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="detections">
+        <h2>Detected Objects</h2>
+        <ul id="detected-objects"></ul>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d');
+        const detectedObjectsList = document.getElementById('detected-objects');
+        const detectedObjects = new Map();
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.addEventListener('loadeddata', () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                });
+            } catch (error) {
+                alert('Error accessing the camera: ' + error.message);
+            }
+        }
+
+        function updateDetectedObjects(objectClass) {
+            if (!detectedObjects.has(objectClass)) {
+                const now = new Date();
+                const time = now.toLocaleTimeString();
+                detectedObjects.set(objectClass, time);
+
+                const listItem = document.createElement('li');
+                listItem.textContent = `${objectClass} detected at ${time}`;
+                detectedObjectsList.appendChild(listItem);
+            }
+        }
+
+        async function startDetection() {
+            const model = await cocoSsd.load();
+            const detectionInterval = 500; // 2 FPS
+
+            async function detect() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const predictions = await model.detect(video);
+
+                predictions.forEach(prediction => {
+                    const [x, y, width, height] = prediction.bbox;
+                    ctx.strokeStyle = '#0f0';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, width, height);
+
+                    ctx.fillStyle = '#0f0';
+                    ctx.font = '16px Arial';
+                    ctx.fillText(
+                        `${prediction.class} (${(prediction.score * 100).toFixed(1)}%)`,
+                        x,
+                        y - 10
+                    );
+
+                    updateDetectedObjects(prediction.class);
+                });
+
+                setTimeout(detect, detectionInterval);
+            }
+
+            detect();
+        }
+
+        async function init() {
+            await setupCamera();
+            startDetection();
+        }
+
+        init();
+    </script>
+</body>
+</html>
